@@ -1,13 +1,5 @@
--- ============================================================
 -- Portugal Economic Indicators Pipeline
 -- SQL Analysis — Google BigQuery
--- Dataset: portugal_economic_indicators
--- ============================================================
-
-
--- ------------------------------------------------------------
--- BASIC EXPLORATION
--- ------------------------------------------------------------
 
 -- Query 1 — Average Inflation by Year and Economic Period
 SELECT
