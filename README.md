@@ -1,4 +1,4 @@
-# Portugal Economic Indicators Pipeline
+# End-to-End Economic Data Pipeline · Portugal 2010–2025
 
 ![Banner](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline/blob/main/newbanner.png?raw=true)
 
