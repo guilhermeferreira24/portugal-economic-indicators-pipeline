@@ -441,3 +441,188 @@ ORDER BY decada;
 ```
 
 `APPROX_QUANTILES` computes the median (`[OFFSET(1)]` of a 2-quantile split) and the 90th percentile (`[OFFSET(9)]` of a 10-quantile split) — comparing the full distribution of inflation between decades rather than just comparing averages.
+
+***
+
+## Stage 3 — Power BI Dashboard
+
+Connected Power BI Desktop to BigQuery via the native **Get Data → Google BigQuery** connector (Import mode). A central `Calendario` table was created as a date bridge to allow cross-table filtering between `inflation_rates`, `interest_rates_mvp`, and `credit_macro`.
+
+```dax
+Calendario = CALENDAR(DATE(2010,1,1), DATE(2025,12,31))
+```
+
+Relations defined: `Calendario[Date]` → `credit_macro[data]` (1:*) and `Calendario[Date]` → `inflation_rates[data]` (1:*), with single-direction filters. This is the architectural key of the model — without it, cross-table line charts return empty results.
+
+***
+
+### DAX Measures
+
+**Page 1 — Inflation Overview**
+
+```dax
+// 12-month rolling average of inflation
+Rolling 12M Inflation =
+CALCULATE(
+    AVERAGE(inflation_rates[valor]),
+    DATESINPERIOD(
+        inflation_rates[data],
+        MAX(inflation_rates[data]),
+        -12,
+        MONTH
+    )
+)
+
+// Months where inflation exceeded the ECB 2% target
+Months Above 2% =
+CALCULATE(
+    COUNTROWS(inflation_rates),
+    inflation_rates[indicador] = "IHPC",
+    inflation_rates[valor] > 2
+)
+
+// Months where inflation was at or below 2%
+Months Below 2% =
+CALCULATE(
+    COUNTROWS(inflation_rates),
+    inflation_rates[indicador] = "IHPC",
+    inflation_rates[valor] <= 2
+)
+```
+
+**Page 2 — Interest Rates Analysis**
+
+```dax
+// Most recent Euribor 3M value
+Euribor3M_Atual =
+CALCULATE(
+    LASTNONBLANK(interest_rates_mvp[valor], 1),
+    interest_rates_mvp[indicador] = "Euribor_3M"
+)
+
+// Housing loan spread over Euribor 12M
+Spread_Habitacao =
+CALCULATE(
+    AVERAGE(inflation_rates[valor]),
+    inflation_rates[indicador] = "Housing Tax"
+) -
+CALCULATE(
+    AVERAGE(interest_rates_mvp[valor]),
+    interest_rates_mvp[indicador] = "Euribor 12M"
+)
+```
+
+**Page 3 — Credit & Risk**
+
+```dax
+// Current NPL ratio (most recent month)
+NPL_Atual =
+VAR UltimaData =
+    CALCULATE(
+        MAX(credit_macro[data]),
+        credit_macro[indicador] = "NPL"
+    )
+RETURN
+    CALCULATE(
+        MAX(credit_macro[valor]),
+        credit_macro[indicador] = "NPL",
+        credit_macro[data] = UltimaData
+    )
+
+// Peak NPL ratio (historical maximum)
+NPL_Max =
+CALCULATE(
+    MAX(credit_macro[valor]),
+    credit_macro[indicador] = "NPL"
+)
+
+// Months where real rate was negative (inflation > Euribor 3M)
+Meses_Taxa_Real_Negativa =
+COUNTROWS(
+    FILTER(
+        VALUES(inflation_rates[data]),
+        CALCULATE(
+            AVERAGE(inflation_rates[valor]),
+            inflation_rates[indicador] = "IHPC"
+        ) >
+        CALCULATE(
+            AVERAGE(interest_rates_mvp[valor]),
+            interest_rates_mvp[indicador] = "Euribor12M"
+        )
+    )
+)
+
+// Euribor 12M values pulled into credit_macro context for dual-axis chart
+Euribor12M_Val =
+CALCULATE(
+    AVERAGE(inflation_rates[valor]),
+    inflation_rates[indicador] = "Euribor 12M"
+)
+
+// NPL values for dual-axis chart
+NPL_Val =
+CALCULATE(
+    AVERAGE(credit_macro[valor]),
+    credit_macro[indicador] = "NPL"
+)
+```
+
+`DATESINPERIOD` with `-12, MONTH` creates a true rolling window anchored to the last visible date in the visual — unlike `ROWS BETWEEN` in SQL, it respects filter context from slicers. The `VAR/RETURN` pattern in `NPL_Atual` avoids the `LASTNONBLANK` trap of returning the last alphabetical value instead of the most recent chronological one.
+
+***
+
+### Dashboard Pages
+
+**Page 1 — Inflation Analysis · Portugal 2010–2025**
+
+![Inflation Analysis](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline/blob/main/inflationanalysis.png?raw=true)
+
+Key visuals: KPI card (Avg Inflation: 1.27%), stacked bar chart (Months Above/Below 2% per year 2010–2025), dual-line chart (Inflation Monthly Trend + Rolling 12M Inflation overlay with ECB 2% dashed reference line), slicer (economic period: COVID / Crise / Expansao / Recuperacao)
+
+***
+
+**Page 2 — Interest Rates Analysis · Euribor Trends & Housing Spread 2010–2025**
+
+![Interest Rates Analysis](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline/blob/main/interestrates.png?raw=true)
+
+Key visuals: KPI cards (Avg Euribor 12M: 0.92, Avg Euribor 3M: 0.65, Avg Housing Spread: 1.16), dual-line chart (Euribor 3M vs 12M Historical Trend), area chart (Housing Rate Spread vs Euribor 12M), matrix (Avg Spread by Economic Period — COVID: 0.05 / Recuperacao: 0.23 / Crise: 1.90 / Expansao: 1.97)
+
+***
+
+**Page 3 — Credit & Risk Analysis · NPL Trends, Credit Volume & Real Rate Impact**
+
+![Credit & Risk Analysis](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline/blob/main/creditrisk.png?raw=true)
+
+Key visuals: KPI cards (Current NPL Ratio: 1.42, Peak NPL Ratio: 4.66, Months of Negative Real Rate: 181), dual-line chart (Euribor 12M vs NPL Rate 2010–2025), area chart (Avg New Housing Loan Rate %)
+
+***
+
+## Key Findings
+
+- **181 months of negative real rate** — from 2008 to 2022, inflation exceeded Euribor 3M for roughly 70% of the period, meaning saving money actively lost purchasing power for over 15 years
+- **NPL peaked at 4.66% during 2011–2012** and has since recovered to ~1.42% — the crisis era left a lasting scar on Portuguese credit quality before gradual deleveraging took effect
+- **Housing spread remained above 1.5pp even when Euribor was negative** — Portuguese banks never fully passed low rates on to mortgage borrowers, maintaining margin throughout the low-rate period
+- **Euribor surge in 2022–2023 coincided with inflation peaking and then falling** — the ECB rate hike cycle is clearly visible in the data, with inflation responding within 12–18 months
+- **The 2010s inflation distribution is structurally different from the 2020s** — the PERCENTILE_CONT query confirms that the p90 inflation figure in the 2020s exceeds the 2010s median, reflecting how the post-COVID expansion shifted the entire distribution upward
+
+***
+
+## What I Learned
+
+- **`DATESINPERIOD` vs `ROWS BETWEEN`** — DAX rolling windows respect filter context from slicers dynamically; a SQL rolling window is static over the full dataset. The same "12-month average" behaves completely differently depending on the tool
+- **`VAR/RETURN` for point-in-time values** — `LASTNONBLANK` returns the last alphabetical value, not the most recent chronological one; wrapping `MAX(data)` in a `VAR` and using it as a filter in `RETURN` is the reliable pattern for "value at last date"
+- **Date table is mandatory for cross-table visuals** — without a central `Calendario` table, Power BI cannot align time series from different tables on the same axis. Adding it as a 1:* bridge resolved every empty chart issue immediately
+- **`pandas-gbq` `if_exists="replace"`** — ensures clean full refreshes with no duplicate accumulation across pipeline runs; important when re-running with updated API data
+- **BPstat CSV headers are locale-dependent** — the date column header varies between `período` and `periodo` depending on the browser/request language; dynamic column detection with `.strip().lower()` makes the extraction function robust to this
+- **`DATE_TRUNC(..., QUARTER)` for cross-frequency joins** — aligning monthly Euribor with quarterly NPL data requires truncating both to quarter before joining; without this the JOIN returns zero matches due to date granularity mismatch
+- **`APPROX_QUANTILES` vs `PERCENTILE_CONT`** — BigQuery uses `APPROX_QUANTILES(col, N)[OFFSET(k)]` where N is the number of buckets; SQL Server/PostgreSQL use `PERCENTILE_CONT(0.x) WITHIN GROUP (ORDER BY col)`. Same concept, completely different syntax
+
+***
+
+## Source
+
+Dataset: [Banco de Portugal — BPstat API](https://bpstat.bportugal.pt)
+Python: Google Colab
+SQL Environment: Google BigQuery Sandbox
+BI Tool: Microsoft Power BI Desktop
+Repository: [github.com/guilhermeferreira24/portugal-economic-indicators-pipeline](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline)
