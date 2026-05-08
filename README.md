@@ -1,6 +1,6 @@
 # Portugal Economic Indicators Pipeline
 
-![Banner](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline/blob/main/banner.png?raw=true)
+![Banner](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline/blob/main/newbanner.png?raw=true)
 
 ## Overview
 
