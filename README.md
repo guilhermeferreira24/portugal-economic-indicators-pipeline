@@ -1,7 +1,11 @@
 # End-to-End Economic Data Pipeline · Portugal 2010–2025
 
-
 ![Banner](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline/blob/main/newbanner.png?raw=true)
+
+![Python](https://img.shields.io/badge/Python-3.10-blue)
+![BigQuery](https://img.shields.io/badge/Google-BigQuery-orange)
+![PowerBI](https://img.shields.io/badge/Power-BI-yellow)
+![Status](https://img.shields.io/badge/Status-Complete-brightgreen)
 
 ## Overview
 
@@ -84,6 +88,16 @@ Extract 8 economic series from the BPstat API via CSV endpoint, clean and normal
 
 **Stage 3 — Power BI Dashboard**
 3-page interactive dashboard built on top of the BigQuery tables, connected via the native Power BI → BigQuery connector, with DAX measures for dynamic KPIs.
+
+***
+
+## How to Run
+
+1. Open `pipeline.ipynb` in Google Colab
+2. Authenticate with your Google account
+3. Set your `PROJECT_ID` in the config cell
+4. Run all cells — data is extracted, transformed and loaded to BigQuery automatically
+5. Open Power BI → Refresh → dashboard updates
 
 ***
 
@@ -624,8 +638,10 @@ Key visuals: KPI cards (Current NPL Ratio: 1.42, Peak NPL Ratio: 4.66, Months of
 
 ## Source
 
-Dataset: [Banco de Portugal — BPstat API](https://bpstat.bportugal.pt)
-Python: Google Colab
-SQL Environment: Google BigQuery Sandbox
-BI Tool: Microsoft Power BI Desktop
-Repository: [github.com/guilhermeferreira24/portugal-economic-indicators-pipeline](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline)
+| | |
+|---|---|
+| **Data** | [Banco de Portugal — BPstat API](https://bpstat.bportugal.pt) |
+| **Python** | Google Colab |
+| **SQL** | Google BigQuery Sandbox |
+| **BI Tool** | Microsoft Power BI Desktop |
+| **Repository** | [github.com/guilhermeferreira24/portugal-economic-indicators-pipeline](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline) |
