@@ -246,6 +246,16 @@ GROUP BY ano, mes, periodo
 ORDER BY ano, mes;
 ```
 
+*Sample output (192 rows total — one per month across all periods):*
+
+| ano | mes | periodo | inflacao_media_pct |
+|-----|-----|---------|-------------------|
+| 2010 | 1 | Crise | 0.80 |
+| 2012 | 9 | Crise | 3.50 |
+| 2017 | 4 | Recuperacao | 4.20 |
+| 2021 | 6 | COVID | -3.30 |
+| 2023 | 8 | Expansao | 8.00 |
+
 ***
 
 **Query 2 — Months Where Inflation Exceeded 3% (ECB Target)**
@@ -261,6 +271,16 @@ WHERE indicador = 'IHPC'
 GROUP BY ano, periodo
 ORDER BY ano;
 ```
+
+| ano | periodo | meses_acima_3pct |
+|-----|---------|-----------------|
+| 2012 | Crise | 8 |
+| 2017 | Recuperacao | 2 |
+| 2018 | Recuperacao | 2 |
+| 2022 | Expansao | 11 |
+| 2023 | Expansao | 12 |
+| 2024 | Expansao | 12 |
+| 2025 | Expansao | 9 |
 
 ***
 
@@ -278,6 +298,16 @@ ORDER BY ano;
 ```
 
 Pivoting two series in a single query using conditional `AVG(CASE WHEN)` avoids a JOIN and returns both rates side by side per year — clean for direct use in Power BI line charts.
+
+| ano | euribor_3m_media | euribor_12m_media |
+|-----|-----------------|------------------|
+| 2010 | 0.81 | 1.35 |
+| 2013 | 0.22 | 0.54 |
+| 2016 | -0.26 | -0.03 |
+| 2020 | -0.43 | -0.30 |
+| 2022 | 0.34 | 1.09 |
+| 2023 | 3.43 | 3.86 |
+| 2025 | 2.18 | 2.22 |
 
 ***
 
@@ -300,6 +330,16 @@ ORDER BY ano;
 
 The `spread_medio` column measures how much margin banks charged above the reference rate each year — the core metric behind one of the project's key findings.
 
+| ano | taxa_habitacao_media | euribor_12m_media | spread_medio |
+|-----|---------------------|------------------|-------------|
+| 2010 | 1.56 | 1.35 | 0.21 |
+| 2012 | 1.80 | 1.11 | 0.68 |
+| 2016 | 0.25 | -0.03 | 0.28 |
+| 2020 | 0.06 | -0.30 | 0.36 |
+| 2022 | 0.27 | 1.09 | -0.82 |
+| 2023 | 2.61 | 3.86 | -1.25 |
+| 2025 | 1.87 | 2.22 | -0.35 |
+
 ***
 
 **Query 5 — YoY Inflation Variation with LAG()**
@@ -319,6 +359,16 @@ ORDER BY data;
 ```
 
 `LAG(inflacao, 12)` looks back exactly 12 rows in the time-ordered partition — equivalent to the same month in the prior year — computing a true YoY delta without any calendar join.
+
+*Sample output (first 12 months return null for `inflacao_12m_antes` — no prior year available):*
+
+| data | periodo | inflacao | inflacao_12m_antes | variacao_yoy |
+|------|---------|---------|-------------------|-------------|
+| 2011-01-31 | Crise | 2.60 | 0.80 | 1.80 |
+| 2012-09-30 | Crise | 3.50 | 2.40 | 1.10 |
+| 2020-09-30 | COVID | -1.40 | 0.30 | -1.70 |
+| 2022-04-30 | Expansao | 5.30 | -2.10 | 7.40 |
+| 2024-08-31 | Expansao | 3.10 | 8.00 | -4.90 |
 
 ***
 
@@ -341,6 +391,16 @@ ORDER BY data;
 ```
 
 `ROWS BETWEEN 11 PRECEDING AND CURRENT ROW` creates a rolling 12-month window that smooths out short-term spikes and reveals the true underlying inflation trend.
+
+*Sample output — note how the rolling average lags behind sharp moves:*
+
+| data | periodo | inflacao | media_movel_12m |
+|------|---------|---------|----------------|
+| 2012-12-31 | Crise | 3.40 | 3.16 |
+| 2021-06-30 | COVID | -3.30 | -0.83 |
+| 2022-06-30 | Expansao | 5.50 | 2.65 |
+| 2023-08-31 | Expansao | 8.00 | 6.45 |
+| 2025-12-31 | Expansao | 4.20 | 3.57 |
 
 ***
 
@@ -370,6 +430,21 @@ ORDER BY periodo, rank_in_periodo, data;
 ```
 
 `DENSE_RANK()` is used instead of `RANK()` to avoid gaps when tied values exist — ensuring every period always produces exactly 5 results regardless of ties.
+
+| data | periodo | inflacao | rank_in_periodo |
+|------|---------|---------|----------------|
+| 2023-08-31 | Expansao | 8.00 | 1 |
+| 2023-06-30 | Expansao | 7.90 | 2 |
+| 2023-05-31 | Expansao | 7.80 | 3 |
+| 2023-07-31 | Expansao | 7.30 | 4 |
+| 2023-04-30 | Expansao | 7.10 | 5 |
+| 2012-09-30 | Crise | 3.50 | 1 |
+| 2012-08-31 | Crise | 3.40 | 2 |
+| 2012-12-31 | Crise | 3.40 | 2 |
+| 2017-04-30 | Recuperacao | 4.20 | 1 |
+| 2018-07-31 | Recuperacao | 3.80 | 2 |
+| 2021-11-30 | COVID | 2.40 | 1 |
+| 2021-12-31 | COVID | 2.10 | 2 |
 
 ***
 
@@ -403,6 +478,21 @@ ORDER BY e.trimestre;
 
 `DATE_TRUNC(..., QUARTER)` aligns the monthly Euribor series with the quarterly NPL series before joining — without this normalisation the JOIN would return no matches due to date granularity mismatch.
 
+*Sample output — last 10 quarters showing the Euribor surge and NPL response:*
+
+| trimestre | euribor_3m_media | npl_media |
+|-----------|-----------------|----------|
+| 2022-10-01 | 1.43 | 0.04 |
+| 2023-01-01 | 2.34 | 0.04 |
+| 2023-04-01 | 3.18 | 0.04 |
+| 2023-07-01 | 3.68 | 0.05 |
+| 2023-10-01 | 3.97 | 0.05 |
+| 2024-01-01 | 3.92 | 0.06 |
+| 2024-04-01 | 3.85 | 0.06 |
+| 2024-07-01 | 3.58 | 0.07 |
+| 2024-10-01 | 3.00 | 0.07 |
+| 2025-01-01 | 2.70 | 0.08 |
+
 ***
 
 **Query 9 — Months of Negative Real Rate (Inflation > Euribor)**
@@ -430,6 +520,18 @@ ORDER BY i.data;
 ```
 
 Returns every month where the real rate was negative — the period where saving money actively lost purchasing power. This result feeds directly into the KPI card on Page 3 of the dashboard.
+
+*Sample output — 180 rows total, spanning 2010 to 2025:*
+
+| data | inflacao | euribor_3m | taxa_real |
+|------|---------|-----------|----------|
+| 2010-01-31 | 0.80 | 0.68 | -0.12 |
+| 2012-09-30 | 3.50 | 0.25 | -3.25 |
+| 2017-04-30 | 4.20 | -0.33 | -4.53 |
+| 2022-09-30 | 6.80 | 1.01 | -5.79 |
+| 2023-08-31 | 8.00 | 3.78 | -4.22 |
+| 2024-03-31 | 5.30 | 3.92 | -1.38 |
+| 2025-12-31 | 4.20 | 2.05 | -2.15 |
 
 ***
 
@@ -459,6 +561,13 @@ ORDER BY decada;
 
 `APPROX_QUANTILES` computes the median (`[OFFSET(1)]` of a 2-quantile split) and the 90th percentile (`[OFFSET(9)]` of a 10-quantile split) — comparing the full distribution of inflation between decades rather than just comparing averages.
 
+| decada | mediana_inflacao | p90_inflacao |
+|--------|----------------|-------------|
+| 2010s | 1.50 | 3.00 |
+| 2020s | 3.80 | 6.40 |
+
+The 2020s median (3.8%) already exceeds the 2010s 90th percentile (3.0%) — meaning inflation in the post-COVID era was structurally higher than even the worst months of the previous decade.
+
 ***
 
 ## Stage 3 — Power BI Dashboard
@@ -470,6 +579,8 @@ Calendario = CALENDAR(DATE(2010,1,1), DATE(2025,12,31))
 ```
 
 Relations defined: `Calendario[Date]` → `credit_macro[data]` (1:*) and `Calendario[Date]` → `inflation_rates[data]` (1:*), with single-direction filters. This is the architectural key of the model — without it, cross-table line charts return empty results.
+
+![Data Model](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline/blob/main/calendario.png?raw=true)
 
 ***
 
