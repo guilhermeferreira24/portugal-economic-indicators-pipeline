@@ -1,5 +1,7 @@
 # Portugal Economic Indicators Pipeline
 
+![Banner](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline/blob/main/banner.png?raw=true)
+
 ## Overview
 
 This project builds an end-to-end data pipeline that extracts real economic indicators from the **Banco de Portugal BPstat API** — inflation, interest rates, credit volume, non-performing loans, unemployment and GDP — processes them in Python, loads them into Google BigQuery, analyses them with SQL, and visualises the results in Power BI.
