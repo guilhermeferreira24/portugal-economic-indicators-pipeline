@@ -29,7 +29,7 @@ All data is sourced directly from official Banco de Portugal endpoints, covering
 
 | Series | Indicator | Frequency | Period | BigQuery Table |
 |--------|-----------|-----------|--------|----------------|
-| Inflation | IHPC — Harmonised Index of Consumer Prices Portugal | Monthly | 2010–2025 | `portugal_economic_indicators.inflation_rates` |
+| Inflation | HICP — Harmonised Index of Consumer Prices Portugal | Monthly | 2010–2025 | `portugal_economic_indicators.inflation_rates` |
 | Rates | Euribor 3M — interbank market reference rate | Monthly | 2010–2025 | `portugal_economic_indicators.inflation_rates` |
 | Rates | Euribor 12M — mortgage credit reference rate | Monthly | 2010–2025 | `portugal_economic_indicators.inflation_rates` |
 | Credit | Average interest rate — housing loans to households | Monthly | 2010–2025 | `portugal_economic_indicators.inflation_rates` |
@@ -42,12 +42,12 @@ All data is sourced directly from official Banco de Portugal endpoints, covering
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `data` | DATE | Observation date |
-| `valor` | FLOAT | Indicator value |
-| `indicador` | STRING | Series name (IHPC, Euribor_3M, NPL…) |
-| `ano` | INTEGER | Extracted year |
-| `mes` | INTEGER | Extracted month |
-| `periodo` | STRING | Economic period classification (Crise / Recuperacao / COVID / Expansao) |
+| `date` | DATE | Observation date |
+| `value` | FLOAT | Indicator value |
+| `indicator` | STRING | Series name (HICP, Euribor_3M, NPL…) |
+| `year` | INTEGER | Extracted year |
+| `month` | INTEGER | Extracted month |
+| `period` | STRING | Economic period classification (Crisis / Recovery / COVID / Expansion) |
 
 ***
 
@@ -65,12 +65,12 @@ All data is sourced directly from official Banco de Portugal endpoints, covering
 
 | Term | Description |
 |------|-------------|
-| **IHPC** | Harmonised Index of Consumer Prices — the standard EU inflation measure used by the ECB to set monetary policy targets |
+| **HICP** | Harmonised Index of Consumer Prices — the standard EU inflation measure used by the ECB to set monetary policy targets |
 | **Euribor** | Euro Interbank Offered Rate — the reference rate at which European banks lend to each other; drives mortgage rates across the Eurozone |
 | **Spread** | Difference between the housing loan rate and Euribor 12M — measures how much margin banks add above the reference rate |
 | **NPL** | Non-Performing Loans — credit where the borrower has stopped making payments; a direct measure of credit risk in the banking sector |
 | **YoY** | Year-over-Year — compares a value to the same month in the previous year, removing seasonal noise |
-| **Taxa Real** | Real interest rate — Euribor minus inflation; when negative, saving money loses real purchasing power |
+| **Real Rate** | Real interest rate — Euribor minus inflation; when negative, saving money loses real purchasing power |
 | **BPstat API** | Banco de Portugal's public data API — provides official time series for all Portuguese macroeconomic indicators |
 | **ECB Target** | The European Central Bank's inflation target is 2% — used in this project as a threshold for above-target months |
 
@@ -109,19 +109,19 @@ import requests
 from io import StringIO
 
 SERIES = {
-    "IHPC":           "5739164",
-    "Euribor_3M":     "13168436",
-    "Euribor_12M":    "13168437",
-    "Taxa_habitacao": "12519808",
-    "Volume_credito": "12519806",
-    "NPL":            "12519807",
-    "Desemprego":     "12518324",
-    "PIB":            "12518325",
+    "HICP":              "5739164",
+    "Euribor_3M":        "13168436",
+    "Euribor_12M":       "13168437",
+    "Housing_Rate":      "12519808",
+    "Credit_Volume":     "12519806",
+    "NPL":               "12519807",
+    "Unemployment":      "12518324",
+    "GDP":               "12518325",
 }
 
 BASE_CSV_URL = "https://bpstat.bportugal.pt/api/observations/csv/?series_ids={}&language=PT"
 
-def extract_series_csv(series_id, nome):
+def extract_series_csv(series_id, name):
     url = BASE_CSV_URL.format(series_id)
     r = requests.get(url, timeout=30)
     r.raise_for_status()
@@ -129,40 +129,40 @@ def extract_series_csv(series_id, nome):
     df = pd.read_csv(StringIO(r.text), sep=";")
 
     if df.empty:
-        return pd.DataFrame(columns=["data", "valor", "indicador"])
+        return pd.DataFrame(columns=["date", "value", "indicator"])
 
     col_map = {}
     for c in df.columns:
         cl = c.strip().lower()
         if "período" in cl or "periodo" in cl:
-            col_map[c] = "data"
+            col_map[c] = "date"
         elif cl == "valor":
-            col_map[c] = "valor"
+            col_map[c] = "value"
 
     df = df.rename(columns=col_map)
 
-    if "data" not in df.columns or "valor" not in df.columns:
-        return pd.DataFrame(columns=["data", "valor", "indicador"])
+    if "date" not in df.columns or "value" not in df.columns:
+        return pd.DataFrame(columns=["date", "value", "indicator"])
 
-    df["data"]     = pd.to_datetime(df["data"], errors="coerce")
-    df["valor"]    = pd.to_numeric(df["valor"], errors="coerce")
-    df["indicador"] = nome
+    df["date"]      = pd.to_datetime(df["date"], errors="coerce")
+    df["value"]     = pd.to_numeric(df["value"], errors="coerce")
+    df["indicator"] = name
 
-    return df[["data", "valor", "indicador"]].dropna(subset=["data", "valor"])
+    return df[["date", "value", "indicator"]].dropna(subset=["date", "value"])
 
 # Extract all 8 series
 print("Extracting 8 BPstat series...")
 dfs = []
-for nome, sid in SERIES.items():
-    d = extract_series_csv(sid, nome)
+for name, sid in SERIES.items():
+    d = extract_series_csv(sid, name)
     if len(d) > 0:
-        print(f"  ✅ {nome} → {len(d)} rows")
+        print(f"  ✅ {name} → {len(d)} rows")
         dfs.append(d)
     else:
-        print(f"  ❌ NO DATA: {nome}")
+        print(f"  ❌ NO DATA: {name}")
 
 df_master = pd.concat(dfs, ignore_index=True)
-df_master = df_master.sort_values(["indicador", "data"]).reset_index(drop=True)
+df_master = df_master.sort_values(["indicator", "date"]).reset_index(drop=True)
 ```
 
 The BPstat API returns semicolon-separated CSV files with Portuguese column headers. The extraction function normalises column names dynamically — detecting the date column regardless of accent variations in the header (`período` vs `periodo`) — before parsing types and tagging each row with its series name.
@@ -173,24 +173,24 @@ The BPstat API returns semicolon-separated CSV files with Portuguese column head
 
 ```python
 # Derive year, month and economic period
-df_master["ano"]  = df_master["data"].dt.year
-df_master["mes"]  = df_master["data"].dt.month
-df_master["periodo"] = pd.cut(
-    df_master["ano"],
+df_master["year"]  = df_master["date"].dt.year
+df_master["month"] = df_master["date"].dt.month
+df_master["period"] = pd.cut(
+    df_master["year"],
     bins=[2009, 2014, 2019, 2021, 2025],
-    labels=["Crise", "Recuperacao", "COVID", "Expansao"]
+    labels=["Crisis", "Recovery", "COVID", "Expansion"]
 )
 
 # Filter to 2010–2025
 df_master = df_master[
-    (df_master["ano"] >= 2010) & (df_master["ano"] <= 2025)
+    (df_master["year"] >= 2010) & (df_master["year"] <= 2025)
 ].reset_index(drop=True)
 
-df_master.to_csv("pipeline_completo.csv", index=False)
-print(f"✅ Pipeline complete — {len(df_master)} rows across {df_master['indicador'].nunique()} series")
+df_master.to_csv("pipeline_complete.csv", index=False)
+print(f"✅ Pipeline complete — {len(df_master)} rows across {df_master['indicator'].nunique()} series")
 ```
 
-The economic period classification uses `pd.cut()` to bin years into four labelled eras: **Crise** (2010–2014), **Recuperacao** (2015–2019), **COVID** (2020–2021), and **Expansao** (2022–2025). This column is carried into BigQuery and used directly as a slicer dimension in Power BI.
+The economic period classification uses `pd.cut()` to bin years into four labelled eras: **Crisis** (2010–2014), **Recovery** (2015–2019), **COVID** (2020–2021), and **Expansion** (2022–2025). This column is carried into BigQuery and used directly as a slicer dimension in Power BI.
 
 ***
 
@@ -236,25 +236,25 @@ All queries were run on Google BigQuery Sandbox (free tier) against the dataset 
 
 ```sql
 SELECT
-  ano,
-  mes,
-  periodo,
-  AVG(valor) AS inflacao_media_pct
+  year,
+  month,
+  period,
+  AVG(value) AS avg_inflation_pct
 FROM `portugal_economic_indicators.inflation_rates`
-WHERE indicador = 'IHPC'
-GROUP BY ano, mes, periodo
-ORDER BY ano, mes;
+WHERE indicator = 'HICP'
+GROUP BY year, month, period
+ORDER BY year, month;
 ```
 
 *Sample output (192 rows total — one per month across all periods):*
 
-| ano | mes | periodo | inflacao_media_pct |
-|-----|-----|---------|-------------------|
-| 2010 | 1 | Crise | 0.80 |
-| 2012 | 9 | Crise | 3.50 |
-| 2017 | 4 | Recuperacao | 4.20 |
+| year | month | period | avg_inflation_pct |
+|------|-------|--------|-------------------|
+| 2010 | 1 | Crisis | 0.80 |
+| 2012 | 9 | Crisis | 3.50 |
+| 2017 | 4 | Recovery | 4.20 |
 | 2021 | 6 | COVID | -3.30 |
-| 2023 | 8 | Expansao | 8.00 |
+| 2023 | 8 | Expansion | 8.00 |
 
 ***
 
@@ -262,25 +262,25 @@ ORDER BY ano, mes;
 
 ```sql
 SELECT
-  ano,
-  periodo,
-  COUNT(*) AS meses_acima_3pct
+  year,
+  period,
+  COUNT(*) AS months_above_3pct
 FROM `portugal_economic_indicators.inflation_rates`
-WHERE indicador = 'IHPC'
-  AND valor > 3
-GROUP BY ano, periodo
-ORDER BY ano;
+WHERE indicator = 'HICP'
+  AND value > 3
+GROUP BY year, period
+ORDER BY year;
 ```
 
-| ano | periodo | meses_acima_3pct |
-|-----|---------|-----------------|
-| 2012 | Crise | 8 |
-| 2017 | Recuperacao | 2 |
-| 2018 | Recuperacao | 2 |
-| 2022 | Expansao | 11 |
-| 2023 | Expansao | 12 |
-| 2024 | Expansao | 12 |
-| 2025 | Expansao | 9 |
+| year | period | months_above_3pct |
+|------|--------|-------------------|
+| 2012 | Crisis | 8 |
+| 2017 | Recovery | 2 |
+| 2018 | Recovery | 2 |
+| 2022 | Expansion | 11 |
+| 2023 | Expansion | 12 |
+| 2024 | Expansion | 12 |
+| 2025 | Expansion | 9 |
 
 ***
 
@@ -288,19 +288,19 @@ ORDER BY ano;
 
 ```sql
 SELECT
-  ano,
-  AVG(CASE WHEN indicador = 'Euribor_3M'  THEN valor END) AS euribor_3m_media,
-  AVG(CASE WHEN indicador = 'Euribor_12M' THEN valor END) AS euribor_12m_media
+  year,
+  AVG(CASE WHEN indicator = 'Euribor_3M'  THEN value END) AS avg_euribor_3m,
+  AVG(CASE WHEN indicator = 'Euribor_12M' THEN value END) AS avg_euribor_12m
 FROM `portugal_economic_indicators.inflation_rates`
-WHERE indicador IN ('Euribor_3M', 'Euribor_12M')
-GROUP BY ano
-ORDER BY ano;
+WHERE indicator IN ('Euribor_3M', 'Euribor_12M')
+GROUP BY year
+ORDER BY year;
 ```
 
 Pivoting two series in a single query using conditional `AVG(CASE WHEN)` avoids a JOIN and returns both rates side by side per year — clean for direct use in Power BI line charts.
 
-| ano | euribor_3m_media | euribor_12m_media |
-|-----|-----------------|------------------|
+| year | avg_euribor_3m | avg_euribor_12m |
+|------|---------------|----------------|
 | 2010 | 0.81 | 1.35 |
 | 2013 | 0.22 | 0.54 |
 | 2016 | -0.26 | -0.03 |
@@ -317,21 +317,21 @@ Pivoting two series in a single query using conditional `AVG(CASE WHEN)` avoids 
 
 ```sql
 SELECT
-  ano,
-  AVG(CASE WHEN indicador = 'Taxa_habitacao' THEN valor END) AS taxa_habitacao_media,
-  AVG(CASE WHEN indicador = 'Euribor_12M'    THEN valor END) AS euribor_12m_media,
-  AVG(CASE WHEN indicador = 'Taxa_habitacao' THEN valor END) -
-  AVG(CASE WHEN indicador = 'Euribor_12M'    THEN valor END) AS spread_medio
+  year,
+  AVG(CASE WHEN indicator = 'Housing_Rate' THEN value END) AS avg_housing_rate,
+  AVG(CASE WHEN indicator = 'Euribor_12M'  THEN value END) AS avg_euribor_12m,
+  AVG(CASE WHEN indicator = 'Housing_Rate' THEN value END) -
+  AVG(CASE WHEN indicator = 'Euribor_12M'  THEN value END) AS avg_spread
 FROM `portugal_economic_indicators.inflation_rates`
-WHERE indicador IN ('Taxa_habitacao', 'Euribor_12M')
-GROUP BY ano
-ORDER BY ano;
+WHERE indicator IN ('Housing_Rate', 'Euribor_12M')
+GROUP BY year
+ORDER BY year;
 ```
 
-The `spread_medio` column measures how much margin banks charged above the reference rate each year — the core metric behind one of the project's key findings.
+The `avg_spread` column measures how much margin banks charged above the reference rate each year — the core metric behind one of the project's key findings.
 
-| ano | taxa_habitacao_media | euribor_12m_media | spread_medio |
-|-----|---------------------|------------------|-------------|
+| year | avg_housing_rate | avg_euribor_12m | avg_spread |
+|------|-----------------|----------------|-----------|
 | 2010 | 1.56 | 1.35 | 0.21 |
 | 2012 | 1.80 | 1.11 | 0.68 |
 | 2016 | 0.25 | -0.03 | 0.28 |
@@ -345,62 +345,62 @@ The `spread_medio` column measures how much margin banks charged above the refer
 **Query 5 — YoY Inflation Variation with LAG()**
 
 ```sql
-WITH ihpc AS (
-  SELECT data, ano, mes, periodo, valor AS inflacao
+WITH hicp AS (
+  SELECT date, year, month, period, value AS inflation
   FROM `portugal_economic_indicators.inflation_rates`
-  WHERE indicador = 'IHPC'
+  WHERE indicator = 'HICP'
 )
 SELECT
-  data, ano, mes, periodo, inflacao,
-  LAG(inflacao, 12) OVER (ORDER BY data)                          AS inflacao_12m_antes,
-  ROUND((inflacao - LAG(inflacao, 12) OVER (ORDER BY data)), 2)   AS variacao_yoy
-FROM ihpc
-ORDER BY data;
+  date, year, month, period, inflation,
+  LAG(inflation, 12) OVER (ORDER BY date)                           AS inflation_12m_prior,
+  ROUND((inflation - LAG(inflation, 12) OVER (ORDER BY date)), 2)   AS yoy_change
+FROM hicp
+ORDER BY date;
 ```
 
-`LAG(inflacao, 12)` looks back exactly 12 rows in the time-ordered partition — equivalent to the same month in the prior year — computing a true YoY delta without any calendar join.
+`LAG(inflation, 12)` looks back exactly 12 rows in the time-ordered partition — equivalent to the same month in the prior year — computing a true YoY delta without any calendar join.
 
-*Sample output (first 12 months return null for `inflacao_12m_antes` — no prior year available):*
+*Sample output (first 12 months return null for `inflation_12m_prior` — no prior year available):*
 
-| data | periodo | inflacao | inflacao_12m_antes | variacao_yoy |
-|------|---------|---------|-------------------|-------------|
-| 2011-01-31 | Crise | 2.60 | 0.80 | 1.80 |
-| 2012-09-30 | Crise | 3.50 | 2.40 | 1.10 |
+| date | period | inflation | inflation_12m_prior | yoy_change |
+|------|--------|-----------|---------------------|-----------|
+| 2011-01-31 | Crisis | 2.60 | 0.80 | 1.80 |
+| 2012-09-30 | Crisis | 3.50 | 2.40 | 1.10 |
 | 2020-09-30 | COVID | -1.40 | 0.30 | -1.70 |
-| 2022-04-30 | Expansao | 5.30 | -2.10 | 7.40 |
-| 2024-08-31 | Expansao | 3.10 | 8.00 | -4.90 |
+| 2022-04-30 | Expansion | 5.30 | -2.10 | 7.40 |
+| 2024-08-31 | Expansion | 3.10 | 8.00 | -4.90 |
 
 ***
 
 **Query 6 — 12-Month Moving Average of Inflation**
 
 ```sql
-WITH ihpc AS (
-  SELECT data, ano, mes, periodo, valor AS inflacao
+WITH hicp AS (
+  SELECT date, year, month, period, value AS inflation
   FROM `portugal_economic_indicators.inflation_rates`
-  WHERE indicador = 'IHPC'
+  WHERE indicator = 'HICP'
 )
 SELECT
-  data, ano, mes, periodo, inflacao,
-  AVG(inflacao) OVER (
-    ORDER BY data
+  date, year, month, period, inflation,
+  AVG(inflation) OVER (
+    ORDER BY date
     ROWS BETWEEN 11 PRECEDING AND CURRENT ROW
-  ) AS media_movel_12m
-FROM ihpc
-ORDER BY data;
+  ) AS rolling_avg_12m
+FROM hicp
+ORDER BY date;
 ```
 
 `ROWS BETWEEN 11 PRECEDING AND CURRENT ROW` creates a rolling 12-month window that smooths out short-term spikes and reveals the true underlying inflation trend.
 
 *Sample output — note how the rolling average lags behind sharp moves:*
 
-| data | periodo | inflacao | media_movel_12m |
-|------|---------|---------|----------------|
-| 2012-12-31 | Crise | 3.40 | 3.16 |
+| date | period | inflation | rolling_avg_12m |
+|------|--------|-----------|----------------|
+| 2012-12-31 | Crisis | 3.40 | 3.16 |
 | 2021-06-30 | COVID | -3.30 | -0.83 |
-| 2022-06-30 | Expansao | 5.50 | 2.65 |
-| 2023-08-31 | Expansao | 8.00 | 6.45 |
-| 2025-12-31 | Expansao | 4.20 | 3.57 |
+| 2022-06-30 | Expansion | 5.50 | 2.65 |
+| 2023-08-31 | Expansion | 8.00 | 6.45 |
+| 2025-12-31 | Expansion | 4.20 | 3.57 |
 
 ***
 
@@ -409,40 +409,40 @@ ORDER BY data;
 **Query 7 — Top 5 Inflation Months per Economic Period (DENSE_RANK)**
 
 ```sql
-WITH ihpc AS (
-  SELECT data, ano, mes, periodo, valor AS inflacao
+WITH hicp AS (
+  SELECT date, year, month, period, value AS inflation
   FROM `portugal_economic_indicators.inflation_rates`
-  WHERE indicador = 'IHPC'
+  WHERE indicator = 'HICP'
 ),
 ranked AS (
   SELECT
-    data, ano, mes, periodo, inflacao,
+    date, year, month, period, inflation,
     DENSE_RANK() OVER (
-      PARTITION BY periodo
-      ORDER BY inflacao DESC
-    ) AS rank_in_periodo
-  FROM ihpc
+      PARTITION BY period
+      ORDER BY inflation DESC
+    ) AS rank_in_period
+  FROM hicp
 )
-SELECT data, ano, mes, periodo, inflacao, rank_in_periodo
+SELECT date, year, month, period, inflation, rank_in_period
 FROM ranked
-WHERE rank_in_periodo <= 5
-ORDER BY periodo, rank_in_periodo, data;
+WHERE rank_in_period <= 5
+ORDER BY period, rank_in_period, date;
 ```
 
 `DENSE_RANK()` is used instead of `RANK()` to avoid gaps when tied values exist — ensuring every period always produces exactly 5 results regardless of ties.
 
-| data | periodo | inflacao | rank_in_periodo |
-|------|---------|---------|----------------|
-| 2023-08-31 | Expansao | 8.00 | 1 |
-| 2023-06-30 | Expansao | 7.90 | 2 |
-| 2023-05-31 | Expansao | 7.80 | 3 |
-| 2023-07-31 | Expansao | 7.30 | 4 |
-| 2023-04-30 | Expansao | 7.10 | 5 |
-| 2012-09-30 | Crise | 3.50 | 1 |
-| 2012-08-31 | Crise | 3.40 | 2 |
-| 2012-12-31 | Crise | 3.40 | 2 |
-| 2017-04-30 | Recuperacao | 4.20 | 1 |
-| 2018-07-31 | Recuperacao | 3.80 | 2 |
+| date | period | inflation | rank_in_period |
+|------|--------|-----------|---------------|
+| 2023-08-31 | Expansion | 8.00 | 1 |
+| 2023-06-30 | Expansion | 7.90 | 2 |
+| 2023-05-31 | Expansion | 7.80 | 3 |
+| 2023-07-31 | Expansion | 7.30 | 4 |
+| 2023-04-30 | Expansion | 7.10 | 5 |
+| 2012-09-30 | Crisis | 3.50 | 1 |
+| 2012-08-31 | Crisis | 3.40 | 2 |
+| 2012-12-31 | Crisis | 3.40 | 2 |
+| 2017-04-30 | Recovery | 4.20 | 1 |
+| 2018-07-31 | Recovery | 3.80 | 2 |
 | 2021-11-30 | COVID | 2.40 | 1 |
 | 2021-12-31 | COVID | 2.10 | 2 |
 
@@ -453,35 +453,35 @@ ORDER BY periodo, rank_in_periodo, data;
 ```sql
 WITH euribor AS (
   SELECT
-    DATE_TRUNC(data, QUARTER) AS trimestre,
-    AVG(CASE WHEN indicador = 'Euribor_3M' THEN valor END) AS euribor_3m_media
+    DATE_TRUNC(date, QUARTER) AS quarter,
+    AVG(CASE WHEN indicator = 'Euribor_3M' THEN value END) AS avg_euribor_3m
   FROM `portugal_economic_indicators.inflation_rates`
-  WHERE indicador = 'Euribor_3M'
-  GROUP BY trimestre
+  WHERE indicator = 'Euribor_3M'
+  GROUP BY quarter
 ),
 npl AS (
   SELECT
-    DATE_TRUNC(data, QUARTER) AS trimestre,
-    AVG(valor)                AS npl_media
+    DATE_TRUNC(date, QUARTER) AS quarter,
+    AVG(value)                AS avg_npl
   FROM `portugal_economic_indicators.credit_macro`
-  WHERE indicador = 'NPL'
-  GROUP BY trimestre
+  WHERE indicator = 'NPL'
+  GROUP BY quarter
 )
 SELECT
-  e.trimestre,
-  e.euribor_3m_media,
-  n.npl_media
+  e.quarter,
+  e.avg_euribor_3m,
+  n.avg_npl
 FROM euribor e
-JOIN npl n ON e.trimestre = n.trimestre
-ORDER BY e.trimestre;
+JOIN npl n ON e.quarter = n.quarter
+ORDER BY e.quarter;
 ```
 
 `DATE_TRUNC(..., QUARTER)` aligns the monthly Euribor series with the quarterly NPL series before joining — without this normalisation the JOIN would return no matches due to date granularity mismatch.
 
 *Sample output — last 10 quarters showing the Euribor surge and NPL response:*
 
-| trimestre | euribor_3m_media | npl_media |
-|-----------|-----------------|----------|
+| quarter | avg_euribor_3m | avg_npl |
+|---------|---------------|--------|
 | 2022-10-01 | 1.43 | 0.04 |
 | 2023-01-01 | 2.34 | 0.04 |
 | 2023-04-01 | 3.18 | 0.04 |
@@ -498,33 +498,33 @@ ORDER BY e.trimestre;
 **Query 9 — Months of Negative Real Rate (Inflation > Euribor)**
 
 ```sql
-WITH inflacao AS (
-  SELECT data, valor AS inflacao
+WITH inflation AS (
+  SELECT date, value AS inflation
   FROM `portugal_economic_indicators.inflation_rates`
-  WHERE indicador = 'IHPC'
+  WHERE indicator = 'HICP'
 ),
 euribor AS (
-  SELECT data, valor AS euribor_3m
+  SELECT date, value AS euribor_3m
   FROM `portugal_economic_indicators.inflation_rates`
-  WHERE indicador = 'Euribor_3M'
+  WHERE indicator = 'Euribor_3M'
 )
 SELECT
-  i.data,
-  i.inflacao,
+  i.date,
+  i.inflation,
   e.euribor_3m,
-  (e.euribor_3m - i.inflacao) AS taxa_real
-FROM inflacao i
-JOIN euribor e ON i.data = e.data
-WHERE (e.euribor_3m - i.inflacao) < 0
-ORDER BY i.data;
+  (e.euribor_3m - i.inflation) AS real_rate
+FROM inflation i
+JOIN euribor e ON i.date = e.date
+WHERE (e.euribor_3m - i.inflation) < 0
+ORDER BY i.date;
 ```
 
 Returns every month where the real rate was negative — the period where saving money actively lost purchasing power. This result feeds directly into the KPI card on Page 3 of the dashboard.
 
 *Sample output — 180 rows total, spanning 2010 to 2025:*
 
-| data | inflacao | euribor_3m | taxa_real |
-|------|---------|-----------|----------|
+| date | inflation | euribor_3m | real_rate |
+|------|-----------|-----------|----------|
 | 2010-01-31 | 0.80 | 0.68 | -0.12 |
 | 2012-09-30 | 3.50 | 0.25 | -3.25 |
 | 2017-04-30 | 4.20 | -0.33 | -4.53 |
@@ -538,31 +538,31 @@ Returns every month where the real rate was negative — the period where saving
 **Query 10 — Inflation Percentile by Decade (2010s vs 2020s)**
 
 ```sql
-WITH ihpc AS (
+WITH hicp AS (
   SELECT
-    ano,
+    year,
     CASE
-      WHEN ano BETWEEN 2010 AND 2019 THEN '2010s'
-      WHEN ano BETWEEN 2020 AND 2029 THEN '2020s'
-    END AS decada,
-    valor AS inflacao
+      WHEN year BETWEEN 2010 AND 2019 THEN '2010s'
+      WHEN year BETWEEN 2020 AND 2029 THEN '2020s'
+    END AS decade,
+    value AS inflation
   FROM `portugal_economic_indicators.inflation_rates`
-  WHERE indicador = 'IHPC'
-    AND ano BETWEEN 2010 AND 2025
+  WHERE indicator = 'HICP'
+    AND year BETWEEN 2010 AND 2025
 )
 SELECT
-  decada,
-  APPROX_QUANTILES(inflacao, 2)[OFFSET(1)]  AS mediana_inflacao,
-  APPROX_QUANTILES(inflacao, 10)[OFFSET(9)] AS p90_inflacao
-FROM ihpc
-GROUP BY decada
-ORDER BY decada;
+  decade,
+  APPROX_QUANTILES(inflation, 2)[OFFSET(1)]  AS median_inflation,
+  APPROX_QUANTILES(inflation, 10)[OFFSET(9)] AS p90_inflation
+FROM hicp
+GROUP BY decade
+ORDER BY decade;
 ```
 
 `APPROX_QUANTILES` computes the median (`[OFFSET(1)]` of a 2-quantile split) and the 90th percentile (`[OFFSET(9)]` of a 10-quantile split) — comparing the full distribution of inflation between decades rather than just comparing averages.
 
-| decada | mediana_inflacao | p90_inflacao |
-|--------|----------------|-------------|
+| decade | median_inflation | p90_inflation |
+|--------|----------------|--------------|
 | 2010s | 1.50 | 3.00 |
 | 2020s | 3.80 | 6.40 |
 
@@ -572,13 +572,13 @@ The 2020s median (3.8%) already exceeds the 2010s 90th percentile (3.0%) — mea
 
 ## Stage 3 — Power BI Dashboard
 
-Connected Power BI Desktop to BigQuery via the native **Get Data → Google BigQuery** connector (Import mode). A central `Calendario` table was created as a date bridge to allow cross-table filtering between `inflation_rates`, `interest_rates_mvp`, and `credit_macro`.
+Connected Power BI Desktop to BigQuery via the native **Get Data → Google BigQuery** connector (Import mode). A central `Calendar` table was created as a date bridge to allow cross-table filtering between `inflation_rates`, `interest_rates_mvp`, and `credit_macro`.
 
 ```dax
-Calendario = CALENDAR(DATE(2010,1,1), DATE(2025,12,31))
+Calendar = CALENDAR(DATE(2010,1,1), DATE(2025,12,31))
 ```
 
-Relations defined: `Calendario[Date]` → `credit_macro[data]` (1:*) and `Calendario[Date]` → `inflation_rates[data]` (1:*), with single-direction filters. This is the architectural key of the model — without it, cross-table line charts return empty results.
+Relations defined: `Calendar[Date]` → `credit_macro[date]` (1:*) and `Calendar[Date]` → `inflation_rates[date]` (1:*), with single-direction filters. This is the architectural key of the model — without it, cross-table line charts return empty results.
 
 ![Data Model](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline/blob/main/calendario.png?raw=true)
 
@@ -592,10 +592,10 @@ Relations defined: `Calendario[Date]` → `credit_macro[data]` (1:*) and `Calend
 // 12-month rolling average of inflation
 Rolling 12M Inflation =
 CALCULATE(
-    AVERAGE(inflation_rates[valor]),
+    AVERAGE(inflation_rates[value]),
     DATESINPERIOD(
-        inflation_rates[data],
-        MAX(inflation_rates[data]),
+        inflation_rates[date],
+        MAX(inflation_rates[date]),
         -12,
         MONTH
     )
@@ -605,16 +605,16 @@ CALCULATE(
 Months Above 2% =
 CALCULATE(
     COUNTROWS(inflation_rates),
-    inflation_rates[indicador] = "IHPC",
-    inflation_rates[valor] > 2
+    inflation_rates[indicator] = "HICP",
+    inflation_rates[value] > 2
 )
 
 // Months where inflation was at or below 2%
 Months Below 2% =
 CALCULATE(
     COUNTROWS(inflation_rates),
-    inflation_rates[indicador] = "IHPC",
-    inflation_rates[valor] <= 2
+    inflation_rates[indicator] = "HICP",
+    inflation_rates[value] <= 2
 )
 ```
 
@@ -622,21 +622,21 @@ CALCULATE(
 
 ```dax
 // Most recent Euribor 3M value
-Euribor3M_Atual =
+Euribor3M_Current =
 CALCULATE(
-    LASTNONBLANK(interest_rates_mvp[valor], 1),
-    interest_rates_mvp[indicador] = "Euribor_3M"
+    LASTNONBLANK(interest_rates_mvp[value], 1),
+    interest_rates_mvp[indicator] = "Euribor_3M"
 )
 
 // Housing loan spread over Euribor 12M
-Spread_Habitacao =
+Housing_Spread =
 CALCULATE(
-    AVERAGE(inflation_rates[valor]),
-    inflation_rates[indicador] = "Housing Tax"
+    AVERAGE(inflation_rates[value]),
+    inflation_rates[indicator] = "Housing_Rate"
 ) -
 CALCULATE(
-    AVERAGE(interest_rates_mvp[valor]),
-    interest_rates_mvp[indicador] = "Euribor 12M"
+    AVERAGE(interest_rates_mvp[value]),
+    interest_rates_mvp[indicator] = "Euribor_12M"
 )
 ```
 
@@ -644,38 +644,38 @@ CALCULATE(
 
 ```dax
 // Current NPL ratio (most recent month)
-NPL_Atual =
-VAR UltimaData =
+NPL_Current =
+VAR LastDate =
     CALCULATE(
-        MAX(credit_macro[data]),
-        credit_macro[indicador] = "NPL"
+        MAX(credit_macro[date]),
+        credit_macro[indicator] = "NPL"
     )
 RETURN
     CALCULATE(
-        MAX(credit_macro[valor]),
-        credit_macro[indicador] = "NPL",
-        credit_macro[data] = UltimaData
+        MAX(credit_macro[value]),
+        credit_macro[indicator] = "NPL",
+        credit_macro[date] = LastDate
     )
 
 // Peak NPL ratio (historical maximum)
-NPL_Max =
+NPL_Peak =
 CALCULATE(
-    MAX(credit_macro[valor]),
-    credit_macro[indicador] = "NPL"
+    MAX(credit_macro[value]),
+    credit_macro[indicator] = "NPL"
 )
 
 // Months where real rate was negative (inflation > Euribor 3M)
-Meses_Taxa_Real_Negativa =
+Months_Negative_Real_Rate =
 COUNTROWS(
     FILTER(
-        VALUES(inflation_rates[data]),
+        VALUES(inflation_rates[date]),
         CALCULATE(
-            AVERAGE(inflation_rates[valor]),
-            inflation_rates[indicador] = "IHPC"
+            AVERAGE(inflation_rates[value]),
+            inflation_rates[indicator] = "HICP"
         ) >
         CALCULATE(
-            AVERAGE(interest_rates_mvp[valor]),
-            interest_rates_mvp[indicador] = "Euribor12M"
+            AVERAGE(interest_rates_mvp[value]),
+            interest_rates_mvp[indicator] = "Euribor_12M"
         )
     )
 )
@@ -683,19 +683,19 @@ COUNTROWS(
 // Euribor 12M values pulled into credit_macro context for dual-axis chart
 Euribor12M_Val =
 CALCULATE(
-    AVERAGE(inflation_rates[valor]),
-    inflation_rates[indicador] = "Euribor 12M"
+    AVERAGE(inflation_rates[value]),
+    inflation_rates[indicator] = "Euribor_12M"
 )
 
 // NPL values for dual-axis chart
 NPL_Val =
 CALCULATE(
-    AVERAGE(credit_macro[valor]),
-    credit_macro[indicador] = "NPL"
+    AVERAGE(credit_macro[value]),
+    credit_macro[indicator] = "NPL"
 )
 ```
 
-`DATESINPERIOD` with `-12, MONTH` creates a true rolling window anchored to the last visible date in the visual — unlike `ROWS BETWEEN` in SQL, it respects filter context from slicers. The `VAR/RETURN` pattern in `NPL_Atual` avoids the `LASTNONBLANK` trap of returning the last alphabetical value instead of the most recent chronological one.
+`DATESINPERIOD` with `-12, MONTH` creates a true rolling window anchored to the last visible date in the visual — unlike `ROWS BETWEEN` in SQL, it respects filter context from slicers. The `VAR/RETURN` pattern in `NPL_Current` avoids the `LASTNONBLANK` trap of returning the last alphabetical value instead of the most recent chronological one.
 
 ***
 
@@ -705,7 +705,7 @@ CALCULATE(
 
 ![Inflation Analysis](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline/blob/main/inflationanalysis.png?raw=true)
 
-Key visuals: KPI card (Avg Inflation: 1.27%), stacked bar chart (Months Above/Below 2% per year 2010–2025), dual-line chart (Inflation Monthly Trend + Rolling 12M Inflation overlay with ECB 2% dashed reference line), slicer (economic period: COVID / Crise / Expansao / Recuperacao)
+Key visuals: KPI card (Avg Inflation: 1.27%), stacked bar chart (Months Above/Below 2% per year 2010–2025), dual-line chart (Inflation Monthly Trend + Rolling 12M Inflation overlay with ECB 2% dashed reference line), slicer (economic period: COVID / Crisis / Expansion / Recovery)
 
 ***
 
@@ -713,7 +713,7 @@ Key visuals: KPI card (Avg Inflation: 1.27%), stacked bar chart (Months Above/Be
 
 ![Interest Rates Analysis](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline/blob/main/interestrates.png?raw=true)
 
-Key visuals: KPI cards (Avg Euribor 12M: 0.92, Avg Euribor 3M: 0.65, Avg Housing Spread: 1.16), dual-line chart (Euribor 3M vs 12M Historical Trend), area chart (Housing Rate Spread vs Euribor 12M), matrix (Avg Spread by Economic Period — COVID: 0.05 / Recuperacao: 0.23 / Crise: 1.90 / Expansao: 1.97)
+Key visuals: KPI cards (Avg Euribor 12M: 0.92, Avg Euribor 3M: 0.65, Avg Housing Spread: 1.16), dual-line chart (Euribor 3M vs 12M Historical Trend), area chart (Housing Rate Spread vs Euribor 12M), matrix (Avg Spread by Economic Period — COVID: 0.05 / Recovery: 0.23 / Crisis: 1.90 / Expansion: 1.97)
 
 ***
 
@@ -738,8 +738,8 @@ Key visuals: KPI cards (Current NPL Ratio: 1.42, Peak NPL Ratio: 4.66, Months of
 ## What I Learned
 
 - **`DATESINPERIOD` vs `ROWS BETWEEN`** — DAX rolling windows respect filter context from slicers dynamically; a SQL rolling window is static over the full dataset. The same "12-month average" behaves completely differently depending on the tool
-- **`VAR/RETURN` for point-in-time values** — `LASTNONBLANK` returns the last alphabetical value, not the most recent chronological one; wrapping `MAX(data)` in a `VAR` and using it as a filter in `RETURN` is the reliable pattern for "value at last date"
-- **Date table is mandatory for cross-table visuals** — without a central `Calendario` table, Power BI cannot align time series from different tables on the same axis. Adding it as a 1:* bridge resolved every empty chart issue immediately
+- **`VAR/RETURN` for point-in-time values** — `LASTNONBLANK` returns the last alphabetical value, not the most recent chronological one; wrapping `MAX(date)` in a `VAR` and using it as a filter in `RETURN` is the reliable pattern for "value at last date"
+- **Date table is mandatory for cross-table visuals** — without a central `Calendar` table, Power BI cannot align time series from different tables on the same axis. Adding it as a 1:* bridge resolved every empty chart issue immediately
 - **`pandas-gbq` `if_exists="replace"`** — ensures clean full refreshes with no duplicate accumulation across pipeline runs; important when re-running with updated API data
 - **BPstat CSV headers are locale-dependent** — the date column header varies between `período` and `periodo` depending on the browser/request language; dynamic column detection with `.strip().lower()` makes the extraction function robust to this
 - **`DATE_TRUNC(..., QUARTER)` for cross-frequency joins** — aligning monthly Euribor with quarterly NPL data requires truncating both to quarter before joining; without this the JOIN returns zero matches due to date granularity mismatch
