@@ -1,7 +1,5 @@
 # End-to-End Economic Data Pipeline · Portugal 2010–2025
 
-![Banner](https://github.com/guilhermeferreira24/portugal-economic-indicators-pipeline/blob/main/newbanner.png?raw=true)
-
 ![Python](https://img.shields.io/badge/Python-3.10-blue)
 ![BigQuery](https://img.shields.io/badge/Google-BigQuery-orange)
 ![PowerBI](https://img.shields.io/badge/Power-BI-yellow)
